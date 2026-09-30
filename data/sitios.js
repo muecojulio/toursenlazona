@@ -1,0 +1,11 @@
+import { sitiosPart as p1 } from './sitios-1.js';
+import { sitiosPart as p2 } from './sitios-2.js';
+import { sitiosPart as p3 } from './sitios-3.js';
+import { sitiosPart as p4 } from './sitios-4.js';
+import { sitiosPart as p5 } from './sitios-5.js';
+import { sitiosPart as p6 } from './sitios-6.js';
+import { sitiosPart as p7 } from './sitios-7.js';
+import { sitiosPart as p8 } from './sitios-8.js';
+import { sitiosPart as p9 } from './sitios-9.js';
+import { sitiosPart as p10 } from './sitios-10.js';
+export const sitios = [...p1, ...p2, ...p3, ...p4, ...p5, ...p6, ...p7, ...p8, ...p9, ...p10];
