@@ -10,8 +10,8 @@ export const metadata = {
     statusBarStyle: "black-translucent",
   },
   icons: {
-    icon: "/icon-192.png",
-    apple: "/apple-touch-icon.png",
+    icon: "/icon.svg",
+    apple: "/icon.svg",
   },
   manifest: "/manifest.webmanifest",
 };
@@ -29,7 +29,8 @@ export default function RootLayout({ children }) {
   return (
     <html lang="es">
       <head>
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+        <link rel="apple-touch-icon" href="/icon.svg" />
+        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
