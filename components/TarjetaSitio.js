@@ -5,6 +5,7 @@
  */
 import BotonAccion from "./ui/BotonAccion.js";
 import { IconoCheck } from "./ui/iconos.js";
+import ImagenLugar from "./ui/ImagenLugar.js";
 
 export default function TarjetaSitio({
   sitio,
@@ -16,7 +17,14 @@ export default function TarjetaSitio({
   if (!sitio) return null;
   return (
     <article className="tarjeta" data-seleccionada={seleccionada || undefined}>
-      <img className="tarjeta-foto" src={sitio.foto} alt="" loading="lazy" decoding="async" />
+      <ImagenLugar
+        className="tarjeta-foto"
+        src={sitio.foto}
+        fallbackTitle={sitio.wikipedia || sitio.nombre}
+        alt={`Vista de ${sitio.nombre}`}
+        emoji={sitio.emoji}
+        loading="lazy"
+      />
       <div className="tarjeta-cuerpo">
         <h3 className="tarjeta-titulo">
           {sitio.emoji} {sitio.nombre}

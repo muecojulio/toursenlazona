@@ -25,6 +25,8 @@ import Interruptor from "./ui/Interruptor.js";
 import Colapsable from "./ui/Colapsable.js";
 import TarjetaSitio from "./TarjetaSitio.js";
 import RegionAnuncio from "./ui/RegionAnuncio.js";
+import ImagenLugar from "./ui/ImagenLugar.js";
+import PoliticaPrivacidad from "./PoliticaPrivacidad.js";
 
 const ORDEN_TABS = TABS.map((t) => t.id);
 
@@ -393,7 +395,14 @@ export default function TourApp() {
             {tab === "inicio" && (
               <>
                 <section className="hero">
-                  <img src={actual.foto} alt={actual.nombre} />
+                  <ImagenLugar
+                    className="hero-foto"
+                    src={actual.foto}
+                    fallbackSrc={enriquecido?.image?.thumbnail || enriquecido?.image?.original}
+                    alt={`Vista de ${actual.nombre}`}
+                    emoji={actual.emoji}
+                    loading="eager"
+                  />
                   <div className="hero-shade" />
                   <div className="hero-copy">
                     <h1>Viaja sin maleta</h1>
@@ -445,7 +454,14 @@ export default function TourApp() {
                 <div className="map-wrap">
                   <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
                 </div>
-                <div className="panel">
+                <div className="panel panel-sitio">
+                  <ImagenLugar
+                    className="mapa-sitio-foto"
+                    src={actual.foto}
+                    fallbackSrc={enriquecido?.image?.thumbnail || enriquecido?.image?.original}
+                    alt={`Vista de ${actual.nombre}`}
+                    emoji={actual.emoji}
+                  />
                   <p className="meta">Sitio seleccionado</p>
                   <h2>{actual.emoji} {actual.nombre}</h2>
                   <p>{actual.resumen}</p>
@@ -510,16 +526,44 @@ export default function TourApp() {
 
             {tab === "tour" && actual && (
               <section className="tour">
-                <img className="tour-photo" src={actual.foto} alt={actual.nombre} />
                 <p className="meta">{actual.region} · {actual.epoca}</p>
                 <h2>{actual.emoji} {actual.nombre}</h2>
                 <p className="meta">{actual.ciudad}, {actual.pais}</p>
                 <div className="facts">{actual.datos.map((d) => <span className="fact" key={d}>{d}</span>)}</div>
-                <p>{actual.audio}</p>
+
+                <section className="descripcion-lugar" aria-labelledby={`descripcion-${actual.id}`}>
+                  <figure className="descripcion-lugar-figura">
+                    <ImagenLugar
+                      className="tour-photo descripcion-lugar-foto"
+                      src={actual.foto}
+                      fallbackSrc={enriquecido?.image?.thumbnail || enriquecido?.image?.original}
+                      alt={`Vista de ${actual.nombre}`}
+                      emoji={actual.emoji}
+                      loading="eager"
+                    />
+                    <figcaption>{actual.nombre} · {actual.ciudad}, {actual.pais}</figcaption>
+                  </figure>
+                  <div className="descripcion-lugar-cuerpo">
+                    <h3 id={`descripcion-${actual.id}`}>Descripción del lugar</h3>
+                    <p className="descripcion-resumen">{actual.resumen}</p>
+                    <h4>Relato de la guía</h4>
+                    <p>{actual.audio}</p>
+                    {enriquecido?.extract && (
+                      <div className="descripcion-ampliada">
+                        <h4>Información complementaria</h4>
+                        <p>{enriquecido.extract}</p>
+                        {enriquecido.source && (
+                          <a href={enriquecido.source} target="_blank" rel="noreferrer">
+                            Fuente: Wikipedia
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </section>
 
                 <div className="info-extra" aria-busy={cargandoInfo || undefined}>
                   {cargandoInfo && <p className="meta">Consultando datos del sitio…</p>}
-                  {enriquecido?.extract && <p className="meta">{enriquecido.extract}</p>}
                   {clima && <p className="meta">🌤️ {clima.temperature} °C · {clima.description}</p>}
                   {sol?.sunrise && <p className="meta">Amanecer {new Date(sol.sunrise).toLocaleTimeString()} · Atardecer {new Date(sol.sunset).toLocaleTimeString()}</p>}
                   {paisInfo && <p className="meta">{paisInfo.name} · {paisInfo.capital || "—"}</p>}
@@ -611,9 +655,10 @@ export default function TourApp() {
                     <li>Android: Chrome → Instalar aplicación.</li>
                   </ol>
                 </Colapsable>
-                <p className="meta"><a href="/privacidad">Política de privacidad</a></p>
               </section>
             )}
+
+            {tab === "privacidad" && <PoliticaPrivacidad />}
           </TransicionPanel>
         </div>
       </div>

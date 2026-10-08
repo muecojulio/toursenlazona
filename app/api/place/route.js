@@ -11,29 +11,37 @@ export async function GET(request) {
     const wikiRes = await fetch(wikiUrl, { headers, next: { revalidate: 86400 } });
     const wiki = wikiRes.ok ? await wikiRes.json() : null;
 
-    const commonsUrl = new URL("https://commons.wikimedia.org/w/api.php");
-    commonsUrl.searchParams.set("action", "query");
-    commonsUrl.searchParams.set("generator", "search");
-    commonsUrl.searchParams.set("gsrsearch", title);
-    commonsUrl.searchParams.set("gsrnamespace", "6");
-    commonsUrl.searchParams.set("gsrlimit", "1");
-    commonsUrl.searchParams.set("prop", "imageinfo");
-    commonsUrl.searchParams.set("iiprop", "url");
-    commonsUrl.searchParams.set("iiurlwidth", "900");
-    commonsUrl.searchParams.set("format", "json");
+    let imagenCommons = null;
+    // La imagen del artículo es la alternativa más fiel al sitio; Commons solo
+    // se consulta cuando Wikipedia no ofrece miniatura.
+    if (!wiki?.thumbnail?.source && !wiki?.originalimage?.source) {
+      const commonsUrl = new URL("https://commons.wikimedia.org/w/api.php");
+      commonsUrl.searchParams.set("action", "query");
+      commonsUrl.searchParams.set("generator", "search");
+      commonsUrl.searchParams.set("gsrsearch", title);
+      commonsUrl.searchParams.set("gsrnamespace", "6");
+      commonsUrl.searchParams.set("gsrlimit", "1");
+      commonsUrl.searchParams.set("prop", "imageinfo");
+      commonsUrl.searchParams.set("iiprop", "url");
+      commonsUrl.searchParams.set("iiurlwidth", "900");
+      commonsUrl.searchParams.set("format", "json");
 
-    const commonsRes = await fetch(commonsUrl, { headers, next: { revalidate: 86400 } });
-    const commons = commonsRes.ok ? await commonsRes.json() : null;
-    const page = commons?.query?.pages ? Object.values(commons.query.pages)[0] : null;
-    const image = page?.imageinfo?.[0];
+      const commonsRes = await fetch(commonsUrl, { headers, next: { revalidate: 86400 } });
+      const commons = commonsRes.ok ? await commonsRes.json() : null;
+      const page = commons?.query?.pages ? Object.values(commons.query.pages)[0] : null;
+      imagenCommons = page?.imageinfo?.[0] || null;
+    }
+
+    const thumbnail = wiki?.thumbnail?.source || wiki?.originalimage?.source || imagenCommons?.thumburl || imagenCommons?.url || "";
+    const original = wiki?.originalimage?.source || imagenCommons?.url || thumbnail;
 
     return NextResponse.json({
       title: wiki?.title || title,
       extract: wiki?.extract || "",
       source: wiki?.content_urls?.desktop?.page || "",
       image: {
-        original: image?.url || "",
-        thumbnail: image?.thumburl || image?.url || "",
+        original,
+        thumbnail,
       },
     }, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=172800" } });
   } catch {

@@ -1,6 +1,6 @@
 # Tours de Historia
 
-PWA de tours históricos construida con Next.js App Router. Incluye 76 sitios, mapa Leaflet + OpenStreetMap, narración con voces del dispositivo, modo inmersivo y rutas de API sin claves obligatorias.
+PWA de tours históricos construida con Next.js App Router. Incluye 76 sitios, mapa Leaflet + OpenStreetMap, narración con voces del dispositivo, modo inmersivo, fotografías con alternativa desde Wikipedia/Commons y política de privacidad en una pestaña. Las rutas de API no requieren claves.
 
 ## Requisitos
 

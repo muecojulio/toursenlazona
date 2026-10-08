@@ -4,6 +4,7 @@ export const TABS = [
   { id: "sitios", icon: "▣", label: "Sitios" },
   { id: "tour", icon: "▶", label: "Tour" },
   { id: "instalar", icon: "↓", label: "Instalar" },
+  { id: "privacidad", icon: "ⓘ", label: "Privacidad" },
 ];
 
 export const FILTROS = [
