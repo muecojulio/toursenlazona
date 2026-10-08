@@ -1,6 +1,6 @@
 const CACHE = "tours-historia-v3";
 const CACHE_PREFIX = "tours-historia-";
-const APP_SHELL = ["/", "/privacidad", "/manifest.webmanifest", "/icon.svg"];
+const APP_SHELL = ["/", "/privacidad", "/manifest.webmanifest", "/icon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
