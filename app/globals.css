@@ -23,7 +23,11 @@ a{color:var(--gold)}
 .brand small{letter-spacing:.18em;text-transform:uppercase;color:var(--gold);font-size:10px;font-family:system-ui,sans-serif}
 .pill{border:1px solid var(--line);background:rgba(42,34,28,.9);border-radius:999px;padding:8px 12px;font-family:system-ui,sans-serif;font-size:12px}
 .hero,.panel{margin:0 16px 16px}.hero{position:relative;overflow:hidden;border-radius:24px;min-height:220px;background:#2a221c;box-shadow:var(--shadow)}
-.hero img,.tour-photo{width:100%;height:220px;object-fit:cover;display:block}
+.hero-foto,.tour-photo{width:100%;height:220px;object-fit:cover;display:block}
+.imagen-lugar{object-fit:cover}
+.imagen-lugar-fallback{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:radial-gradient(circle at 50% 42%,rgba(212,179,106,.2),transparent 48%),linear-gradient(145deg,#352a22,#1c1612);color:var(--mute)}
+.imagen-lugar-fallback-simbolo{font-size:clamp(32px,8vw,64px);line-height:1}
+.imagen-lugar-fallback-texto{font:600 11px/1.2 system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase}
 .hero-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(18,14,12,.92),transparent 55%)}
 .hero-copy{position:absolute;left:16px;right:16px;bottom:16px}
 .row-btns,.audio-actions{display:flex;gap:8px;padding:0 16px 16px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;touch-action:pan-x pan-y;overscroll-behavior-x:contain}
@@ -76,7 +80,7 @@ a{color:var(--gold)}
  * 2. Pestañas
  * ------------------------------------------------------------------ */
 .pestanas{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(8px + env(safe-area-inset-bottom,0px));width:min(640px,calc(100% - 16px));background:rgba(28,22,18,.94);border:1px solid var(--line);border-radius:22px;padding:6px;z-index:30;backdrop-filter:blur(16px)}
-.pestanas-tira{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(62px,1fr);gap:2px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;touch-action:pan-x pan-y;overscroll-behavior-x:contain}
+.pestanas-tira{position:relative;display:grid;grid-auto-flow:column;grid-auto-columns:minmax(46px,1fr);gap:2px;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;touch-action:pan-x pan-y;overscroll-behavior-x:contain}
 .pestanas-tira::-webkit-scrollbar{display:none}
 .pestanas-indicador{position:absolute;top:4px;bottom:4px;left:0;width:0;border-radius:16px;background:var(--card-2);box-shadow:inset 0 0 0 1px var(--line);z-index:0;transition:transform var(--dur-corta) var(--ease),width var(--dur-corta) var(--ease),opacity var(--dur-corta) var(--ease)}
 .pestana{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:48px;padding:8px 4px;border:0;border-radius:16px;background:transparent;color:var(--mute);font-family:system-ui,sans-serif;font-size:11px;font-weight:600;cursor:pointer;touch-action:manipulation;transition:color var(--dur-micro) var(--ease),transform var(--dur-micro) var(--ease)}
@@ -85,6 +89,7 @@ a{color:var(--gold)}
 .pestana.on span{transform:translateY(-1px)}
 .pestana:active{transform:scale(.96)}
 .pestana:focus-visible{outline:2px solid var(--gold-2);outline-offset:-2px}
+@media (max-width:400px){.pestana{font-size:10px;letter-spacing:-.03em;padding-inline:2px}.pestana span{font-size:17px}}
 
 /* Entrada y salida de paneles */
 .paneles{position:relative;touch-action:auto}
@@ -234,7 +239,22 @@ a{color:var(--gold)}
 .info-extra{margin:12px 0}
 .map-wrap{margin:0 16px 16px;height:360px;border-radius:22px;overflow:hidden;border:1px solid var(--line)}
 .map-wrap .leaflet-container{width:100%;height:100%;background:#1b1713}
+.panel-sitio{overflow:hidden;padding:0 0 16px;border:1px solid var(--line);border-radius:18px;background:var(--card)}
+.mapa-sitio-foto{display:block;width:100%;height:180px;object-fit:cover;background:#1b1713}
+.panel-sitio>.meta,.panel-sitio>h2,.panel-sitio>p:not(.meta),.panel-sitio>.row-btns{margin-left:16px;margin-right:16px}
+.panel-sitio>.meta{margin-top:14px}
 .tour{padding:0 16px 24px}.facts{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.descripcion-lugar{margin:16px 0;border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--card);box-shadow:var(--shadow)}
+.descripcion-lugar-figura{margin:0;background:#1b1713}
+.descripcion-lugar-foto{height:230px}
+.descripcion-lugar-figura figcaption{padding:9px 14px;background:var(--bg-2);border-top:1px solid var(--line);color:var(--mute);font:12px/1.4 system-ui,sans-serif}
+.descripcion-lugar-cuerpo{padding:16px}
+.descripcion-lugar-cuerpo h3{margin:0 0 10px;font-size:21px;line-height:1.2}
+.descripcion-lugar-cuerpo h4{margin:18px 0 6px;color:var(--gold-2);font:600 13px/1.4 system-ui,sans-serif}
+.descripcion-lugar-cuerpo p{margin:0 0 12px;line-height:1.55}
+.descripcion-lugar-cuerpo .descripcion-resumen{color:var(--cream);font-size:16px;font-weight:600}
+.descripcion-ampliada{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.descripcion-ampliada a{display:inline-block;margin:0 0 4px;font:600 13px/1.4 system-ui,sans-serif}
 .fact{background:var(--card-2);border-radius:999px;padding:7px 10px;font-size:12px;font-family:system-ui;color:var(--gold-2)}
 .audio-box{margin-top:16px;padding:0}
 .audio-box .colapsable-interior{padding:0 14px 14px}
@@ -250,7 +270,10 @@ a{color:var(--gold)}
 .pasos{margin-top:16px}
 .steps{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px;color:var(--mute);font-family:system-ui;margin:0}
 .empty{padding:40px 20px;text-align:center;color:var(--mute)}
+.privacy-page{width:100%;height:100dvh;overflow-y:auto;overscroll-behavior-y:contain;background:var(--bg)}
 .legal{max-width:720px;margin:0 auto;padding:24px 16px 120px;font-family:system-ui;line-height:1.5}
+.legal h1{margin-top:0}
+.legal-volver{max-width:720px;margin:0 auto;padding:0 16px 24px;text-align:center;font:600 14px/1.4 system-ui,sans-serif}
 .btn-inmersivo{margin-top:16px;width:100%}
 
 /* Modo inmersivo */
