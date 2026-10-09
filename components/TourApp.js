@@ -9,6 +9,7 @@ import {
   VELOCIDAD_GESTO,
   esControlInteractivo,
   limitar,
+  normalizar,
   useAccion,
   useArrastreHorizontal,
   useMotionReducido,
@@ -29,6 +30,54 @@ import ImagenLugar from "./ui/ImagenLugar.js";
 import PoliticaPrivacidad from "./PoliticaPrivacidad.js";
 
 const ORDEN_TABS = TABS.map((t) => t.id);
+const LEAFLET_JS_INTEGRITY = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
+const LEAFLET_CSS_INTEGRITY = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
+let leafletPromise = null;
+
+function cargarLeaflet() {
+  if (typeof window === "undefined") return Promise.reject(new Error("Leaflet solo puede cargarse en el navegador."));
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletPromise) return leafletPromise;
+
+  leafletPromise = new Promise((resolve, reject) => {
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      link.integrity = LEAFLET_CSS_INTEGRITY;
+      link.crossOrigin = "anonymous";
+      link.referrerPolicy = "no-referrer";
+      document.head.appendChild(link);
+    }
+
+    const script = document.createElement("script");
+    script.id = "leaflet-script";
+    script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+    script.integrity = LEAFLET_JS_INTEGRITY;
+    script.crossOrigin = "anonymous";
+    script.referrerPolicy = "no-referrer";
+    script.onload = () => window.L ? resolve(window.L) : reject(new Error("Leaflet no se inicializó."));
+    script.onerror = () => reject(new Error("No se pudo cargar Leaflet."));
+    document.body.appendChild(script);
+  }).catch((error) => {
+    leafletPromise = null;
+    document.getElementById("leaflet-script")?.remove();
+    throw error;
+  });
+
+  return leafletPromise;
+}
+
+function horaEnZona(value, timezone) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  try {
+    return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", timeZone: timezone || "UTC" }).format(date);
+  } catch {
+    return new Intl.DateTimeFormat("es", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(date);
+  }
+}
 
 export default function TourApp() {
   const [tab, setTab] = useState("inicio");
@@ -42,7 +91,8 @@ export default function TourApp() {
   const [hablando, setHablando] = useState(false);
   const [arOn, setArOn] = useState(false);
   const [url, setUrl] = useState("");
-  const [msgCamara, setMsgCamara] = useState("");
+  const [errorMapa, setErrorMapa] = useState("");
+  const [preferenciasListas, setPreferenciasListas] = useState(false);
   const [voces, setVoces] = useState([]);
   const [tipoVoz, setTipoVoz] = useState("todas");
   const [vozId, setVozId] = useState("");
@@ -61,6 +111,7 @@ export default function TourApp() {
   const leafletRef = useRef(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const arBotonAbrir = useRef(null);
   const arBotonCerrar = useRef(null);
   const temporizadorAnuncio = useRef(null);
 
@@ -76,50 +127,124 @@ export default function TourApp() {
 
   useEffect(() => () => clearTimeout(temporizadorAnuncio.current), []);
 
+  const detenerCamara = useCallback(() => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const alSalir = () => {
+      detenerCamara();
+      setArOn(false);
+      window.speechSynthesis?.cancel();
+      setHablando(false);
+    };
+    const alOcultarse = () => {
+      if (document.visibilityState === "hidden") alSalir();
+    };
+    window.addEventListener("pagehide", alSalir);
+    document.addEventListener("visibilitychange", alOcultarse);
+    return () => {
+      window.removeEventListener("pagehide", alSalir);
+      document.removeEventListener("visibilitychange", alOcultarse);
+      detenerCamara();
+      window.speechSynthesis?.cancel();
+    };
+  }, [detenerCamara]);
+
   useEffect(() => {
     setUrl(window.location.origin);
-    const sola = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    const sola = window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
     setInstalada(!!sola);
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
-    const onPrompt = (e) => { e.preventDefault(); setInstalarEvt(e); };
+
+    const onPrompt = (event) => {
+      event.preventDefault();
+      setInstalarEvt(event);
+    };
     window.addEventListener("beforeinstallprompt", onPrompt);
-    const saved = window.localStorage.getItem("tours-voz");
-    if (saved) {
-      try {
-        const o = JSON.parse(saved);
-        if (o.tipoVoz) setTipoVoz(o.tipoVoz);
-        if (o.vozId) setVozId(o.vozId);
-        if (o.tonoId) setTonoId(o.tonoId);
-      } catch {}
+
+    try {
+      const saved = window.localStorage.getItem("tours-voz");
+      if (saved) {
+        const preferences = JSON.parse(saved);
+        if (TIPOS.some((type) => type.id === preferences?.tipoVoz)) setTipoVoz(preferences.tipoVoz);
+        if (TONOS.some((tone) => tone.id === preferences?.tonoId)) setTonoId(preferences.tonoId);
+        if (typeof preferences?.vozId === "string" && preferences.vozId.length <= 256) {
+          setVozId(preferences.vozId);
+        }
+      }
+    } catch {
+      // El almacenamiento puede estar bloqueado; las preferencias siguen funcionando en memoria.
+    } finally {
+      setPreferenciasListas(true);
     }
-    const cargar = () => setVoces(window.speechSynthesis?.getVoices?.() || []);
-    cargar();
-    window.speechSynthesis?.addEventListener("voiceschanged", cargar);
+
+    const cargarVoces = () => setVoces(window.speechSynthesis?.getVoices?.() || []);
+    cargarVoces();
+    window.speechSynthesis?.addEventListener("voiceschanged", cargarVoces);
     return () => {
-      window.speechSynthesis?.removeEventListener("voiceschanged", cargar);
+      window.speechSynthesis?.removeEventListener("voiceschanged", cargarVoces);
       window.removeEventListener("beforeinstallprompt", onPrompt);
     };
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("tours-voz", JSON.stringify({ tipoVoz, vozId, tonoId }));
-  }, [tipoVoz, vozId, tonoId]);
+    if (!preferenciasListas) return;
+    try {
+      window.localStorage.setItem("tours-voz", JSON.stringify({ tipoVoz, vozId, tonoId }));
+    } catch {
+      // La app no depende de que el navegador permita el almacenamiento local.
+    }
+  }, [preferenciasListas, tipoVoz, vozId, tonoId]);
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
-    setEnriquecido(null); setClima(null); setPaisInfo(null); setSol(null); setFestivos([]);
-    if (!actual) return;
+    const options = { signal: controller.signal };
+    setEnriquecido(null);
+    setClima(null);
+    setPaisInfo(null);
+    setSol(null);
+    setFestivos([]);
+    if (!actual) return () => controller.abort();
+
     setCargandoInfo(true);
     const slug = encodeURIComponent(actual.wikipedia || actual.nombre);
     const fin = () => { if (!cancelled) setCargandoInfo(false); };
-    fetch(`/api/place?title=${slug}`).then((r) => r.ok ? r.json() : null).then((v) => { if (!cancelled) setEnriquecido(v); }).catch(() => {}).finally(fin);
-    fetch(`/api/weather?lat=${actual.lat}&lng=${actual.lng}`).then((r) => r.ok ? r.json() : null).then((v) => { if (!cancelled) setClima(v); }).catch(() => {});
+    fetch(`/api/place?title=${slug}`, options)
+      .then((response) => response.ok ? response.json() : null)
+      .then((value) => { if (!cancelled) setEnriquecido(value); })
+      .catch(() => {})
+      .finally(fin);
+    fetch(`/api/weather?lat=${actual.lat}&lng=${actual.lng}`, options)
+      .then((response) => response.ok ? response.json() : null)
+      .then((value) => { if (!cancelled) setClima(value); })
+      .catch(() => {});
+
     if (!ahorrarDatos) {
-      fetch(`/api/country?pais=${encodeURIComponent(actual.pais)}`).then((r) => r.ok ? r.json() : null).then((v) => { if (!cancelled) setPaisInfo(v); }).catch(() => {});
-      fetch(`/api/sun?lat=${actual.lat}&lng=${actual.lng}`).then((r) => r.ok ? r.json() : null).then((v) => { if (!cancelled) setSol(v); }).catch(() => {});
-      fetch(`/api/holidays?pais=${encodeURIComponent(actual.pais)}`).then((r) => r.ok ? r.json() : null).then((v) => { if (!cancelled) setFestivos(v?.holidays || []); }).catch(() => {});
+      fetch(`/api/country?pais=${encodeURIComponent(actual.pais)}`, options)
+        .then((response) => response.ok ? response.json() : null)
+        .then((value) => { if (!cancelled) setPaisInfo(value); })
+        .catch(() => {});
+      fetch(`/api/sun?lat=${actual.lat}&lng=${actual.lng}`, options)
+        .then((response) => response.ok ? response.json() : null)
+        .then((value) => { if (!cancelled) setSol(value); })
+        .catch(() => {});
+      fetch(`/api/holidays?pais=${encodeURIComponent(actual.pais)}`, options)
+        .then((response) => response.ok ? response.json() : null)
+        .then((value) => { if (!cancelled) setFestivos(value?.holidays || []); })
+        .catch(() => {});
     }
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, [actual, ahorrarDatos]);
 
   const vocesEs = useMemo(() => {
@@ -132,10 +257,10 @@ export default function TourApp() {
 
   const lista = useMemo(() => {
     const base = filtro === "Japón" || filtro === "Mundo" ? SITIOS_BY_REGION[filtro] || [] : sitios;
-    const busqueda = q.trim().toLowerCase();
-    return base.filter((s) => {
-      const texto = `${s.nombre} ${s.ciudad} ${s.pais} ${s.epoca}`.toLowerCase();
-      return coincideFiltro(s, filtro) && texto.includes(busqueda);
+    const busqueda = normalizar(q);
+    return base.filter((sitio) => {
+      const texto = normalizar(`${sitio.nombre} ${sitio.ciudad} ${sitio.pais} ${sitio.epoca}`);
+      return coincideFiltro(sitio, filtro) && texto.includes(busqueda);
     });
   }, [filtro, q]);
 
@@ -210,19 +335,26 @@ export default function TourApp() {
   }
 
   async function abrirAR() {
-    setMsgCamara("");
     await camara.ejecutar(async () => {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("La cámara requiere un navegador compatible y una conexión segura.");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: "environment" } },
         audio: false,
       });
       streamRef.current = stream;
-      if (videoRef.current) {
+
+      try {
+        if (!videoRef.current) throw new Error("No se encontró el visor de cámara.");
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
+        setArOn(true);
+        narrar(`Modo inmersivo de ${actual.nombre}. ${actual.resumen}`);
+      } catch (error) {
+        detenerCamara();
+        throw error;
       }
-      setArOn(true);
-      narrar(`Modo inmersivo de ${actual.nombre}. ${actual.resumen}`);
     }, {
       cargando: "Activando la cámara…",
       exito: "Modo inmersivo listo.",
@@ -234,64 +366,86 @@ export default function TourApp() {
     setArOn(false);
     window.speechSynthesis?.cancel();
     setHablando(false);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
+    detenerCamara();
     avisar("Modo inmersivo cerrado");
+    requestAnimationFrame(() => arBotonAbrir.current?.focus());
   }
 
-  // Escape cierra el modo inmersivo y devuelve el foco al botón que lo abrió.
+  // El diálogo atrapa el foco, se cierra con Escape y lo devuelve al iniciador.
   useEffect(() => {
     if (!arOn) return;
-    const alTeclado = (e) => {
-      if (e.key === "Escape") cerrarAR();
+    const alTeclado = (event) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cerrarAR();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const botones = [...document.querySelectorAll(".ar button:not([disabled])")];
+      const primero = botones[0];
+      const ultimo = botones[botones.length - 1];
+      if (event.shiftKey && document.activeElement === primero) {
+        event.preventDefault();
+        ultimo?.focus();
+      } else if (!event.shiftKey && document.activeElement === ultimo) {
+        event.preventDefault();
+        primero?.focus();
+      }
     };
     document.addEventListener("keydown", alTeclado);
-    const t = setTimeout(() => arBotonCerrar.current?.focus(), 60);
+    const timeout = setTimeout(() => arBotonCerrar.current?.focus(), 60);
     return () => {
       document.removeEventListener("keydown", alTeclado);
-      clearTimeout(t);
+      clearTimeout(timeout);
     };
+    // cerrarAR uses stable refs and setters; attach only while the dialog is open.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [arOn]);
 
   useEffect(() => {
     if (tab !== "mapa") return;
     let cancelled = false;
-    function ensureLeaflet() {
-      return new Promise((resolve) => {
-        if (window.L) return resolve(window.L);
-        if (!document.getElementById("leaflet-css")) {
-          const link = document.createElement("link");
-          link.id = "leaflet-css"; link.rel = "stylesheet";
-          link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-          document.head.appendChild(link);
-        }
-        const script = document.createElement("script");
-        script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-        script.onload = () => resolve(window.L);
-        document.body.appendChild(script);
+    let map = null;
+    let resizeTimer = null;
+    setErrorMapa("");
+
+    cargarLeaflet()
+      .then((L) => {
+        if (cancelled || !mapRef.current) return;
+        const view = centroMapa(filtro);
+        map = L.map(mapRef.current, { zoomControl: true }).setView(view.c, view.z);
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a>',
+          maxZoom: 19,
+        }).addTo(map);
+
+        sitios.filter((sitio) => coincideFiltro(sitio, filtro)).forEach((sitio) => {
+          const marker = L.marker([sitio.lat, sitio.lng]).addTo(map);
+          const popup = document.createElement("div");
+          const title = document.createElement("strong");
+          const detail = document.createElement("span");
+          title.textContent = `${sitio.emoji} ${sitio.nombre}`;
+          detail.textContent = `${sitio.ciudad}, ${sitio.pais}`;
+          popup.append(title, document.createElement("br"), detail);
+          marker.bindPopup(popup);
+          marker.on("click", () => setActual(sitio));
+        });
+
+        leafletRef.current = map;
+        resizeTimer = setTimeout(() => {
+          if (!cancelled && mapRef.current?.isConnected) map.invalidateSize();
+        }, 200);
+      })
+      .catch(() => {
+        if (!cancelled) setErrorMapa("No se pudo cargar el mapa. Comprueba tu conexión e inténtalo de nuevo.");
       });
-    }
-    ensureLeaflet().then((L) => {
-      if (cancelled || !mapRef.current) return;
-      if (leafletRef.current) {
-        try { leafletRef.current.remove(); } catch {}
-        leafletRef.current = null;
-      }
-      const view = centroMapa(filtro);
-      const map = L.map(mapRef.current, { zoomControl: true }).setView(view.c, view.z);
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap", maxZoom: 19 }).addTo(map);
-      sitios.filter((s) => coincideFiltro(s, filtro)).forEach((s) => {
-        const mark = L.marker([s.lat, s.lng]).addTo(map);
-        mark.bindPopup(`<strong>${s.emoji} ${s.nombre}</strong><br/>${s.ciudad}, ${s.pais}`);
-        mark.on("click", () => setActual(s));
-      });
-      leafletRef.current = map;
-      setTimeout(() => {
-        if (mapRef.current?.isConnected) map.invalidateSize();
-      }, 200);
-    });
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      clearTimeout(resizeTimer);
+      if (map && leafletRef.current === map) leafletRef.current = null;
+      try { map?.remove(); } catch {}
+    };
   }, [tab, filtro]);
 
   /* ---------------- Swipe horizontal entre secciones ---------------- */
@@ -345,7 +499,7 @@ export default function TourApp() {
             avisar(`Filtro ${f.label}`);
           }}
         >
-          {f.label}
+          <span aria-hidden="true">{f.icon}</span> {f.label}
         </Chip>
       ))}
     </Rail>
@@ -375,14 +529,24 @@ export default function TourApp() {
 
   return (
     <div className="app" ref={appRef}>
+      <a className="skip-link" href="#panel-principal">Saltar al contenido</a>
       <header className="topbar">
-        <div className="app-inner" style={{ display: "flex", width: "100%", justifyContent: "space-between" }}>
-          <div className="brand"><small>Guía inmersiva</small><b>Tours de Historia</b></div>
-          <span className="pill">{instalada ? "App instalada" : `${sitios.length} sitios`}</span>
+        <div className="app-inner topbar-inner">
+          <div className="brand">
+            <span className="brand-mark" aria-hidden="true">✦</span>
+            <span className="brand-copy">
+              <small>Rutas para almas curiosas</small>
+              <b>Tours de Historia</b>
+            </span>
+          </div>
+          <span className="pill">
+            <span className="pill-icon" aria-hidden="true">{instalada ? "📲" : "🧭"}</span>
+            {instalada ? "Tu guía está lista" : `${sitios.length} lugares por descubrir`}
+          </span>
         </div>
       </header>
 
-      <div className="app-inner">
+      <main className="app-inner app-main">
         <div
           className="paneles"
           id="panel-principal"
@@ -405,13 +569,21 @@ export default function TourApp() {
                   />
                   <div className="hero-shade" />
                   <div className="hero-copy">
-                    <h1>Viaja sin maleta</h1>
-                    <p>Japón y el mundo. Mapa, voces y modo inmersivo.</p>
+                    <span className="hero-kicker"><span aria-hidden="true">✦</span> Pasaporte a otra época</span>
+                    <h1>El mundo está lleno<br />de historias<span className="hero-punto">.</span></h1>
+                    <p>Haz una parada en Japón o cruza continentes: cada lugar guarda una historia para ti.</p>
+                    <div className="hero-metas">
+                      <span>🗺️ {sitios.length} lugares</span>
+                      <span>🎧 Guías con voz</span>
+                    </div>
+                  </div>
+                  <div className="hero-stamp" aria-hidden="true">
+                    <span>↗</span><b>VIAJA</b><small>A TU RITMO</small>
                   </div>
                 </section>
-                <div className="row-btns">
+                <div className="row-btns home-actions">
                   <BotonAccion variante="gold" textos={{ exito: "Abriendo el mapa" }} onClick={() => cambiarTab("mapa")}>
-                    Abrir mapa
+                    🧭 Explorar mapa
                   </BotonAccion>
                   {!instalada && (
                     <BotonAccion
@@ -421,18 +593,25 @@ export default function TourApp() {
                       onClick={descargarApp}
                       textos={{ cargando: "Instalando…", exito: "Instalada", error: "No se pudo instalar" }}
                     >
-                      Descargar app
+                      ↓ Instalar la guía
                     </BotonAccion>
                   )}
                   <BotonAccion variante="ghost" textos={{ exito: "Filtro Kioto" }} onClick={() => { setFiltro("Kioto"); cambiarTab("sitios"); }}>
-                    Templos de Kioto
+                    ⛩️ Templos de Kioto
                   </BotonAccion>
                   <BotonAccion variante="ghost" textos={{ exito: "Abriendo tour" }} onClick={() => abrirTour(getSitioById("naritasan"))}>
-                    Tour en Narita
+                    🍵 Tour en Narita
                   </BotonAccion>
                 </div>
+                <div className="section-heading section-heading-home">
+                  <div>
+                    <span className="eyebrow">Tu próxima parada</span>
+                    <h2>Elige una historia</h2>
+                  </div>
+                  <span className="section-note">✨ Rutas con carácter</span>
+                </div>
                 {filtros}
-                <Carrusel etiqueta="Sitios para explorar" valor={actual?.id}>
+                <Carrusel etiqueta="Sitios para explorar" valor={actual?.id} className="carrusel-destinos">
                   {lista.slice(0, 8).map((s) => (
                     <li className="carrusel-item" key={s.id}>
                       <TarjetaSitio
@@ -450,9 +629,17 @@ export default function TourApp() {
 
             {tab === "mapa" && (
               <>
+                <div className="section-heading panel-heading">
+                  <div>
+                    <span className="eyebrow">Cartografía viajera</span>
+                    <h2>Traza tu propia ruta</h2>
+                  </div>
+                  <span className="section-note">📍 {lista.length} paradas</span>
+                </div>
                 {filtros}
-                <div className="map-wrap">
-                  <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+                <div className="map-wrap" role="region" aria-label="Mapa interactivo de sitios históricos">
+                  <div ref={mapRef} className="map-canvas" />
+                  {errorMapa && <p className="map-error" role="status">{errorMapa}</p>}
                 </div>
                 <div className="panel panel-sitio">
                   <ImagenLugar
@@ -465,7 +652,7 @@ export default function TourApp() {
                   <p className="meta">Sitio seleccionado</p>
                   <h2>{actual.emoji} {actual.nombre}</h2>
                   <p>{actual.resumen}</p>
-                  <div className="row-btns" style={{ padding: "12px 0 0" }}>
+                  <div className="row-btns panel-actions">
                     <BotonAccion variante="gold" textos={{ exito: "Tour abierto" }} onClick={() => abrirTour(actual)}>
                       Abrir tour
                     </BotonAccion>
@@ -479,6 +666,13 @@ export default function TourApp() {
 
             {tab === "sitios" && (
               <>
+                <div className="section-heading panel-heading">
+                  <div>
+                    <span className="eyebrow">Colección de lugares</span>
+                    <h2>Encuentra tu próxima parada</h2>
+                  </div>
+                  <span className="section-note">🌍 Japón + mundo</span>
+                </div>
                 <BuscadorCombo
                   id="buscador-sitios"
                   etiqueta="Buscar sitios"
@@ -565,8 +759,10 @@ export default function TourApp() {
                 <div className="info-extra" aria-busy={cargandoInfo || undefined}>
                   {cargandoInfo && <p className="meta">Consultando datos del sitio…</p>}
                   {clima && <p className="meta">🌤️ {clima.temperature} °C · {clima.description}</p>}
-                  {sol?.sunrise && <p className="meta">Amanecer {new Date(sol.sunrise).toLocaleTimeString()} · Atardecer {new Date(sol.sunset).toLocaleTimeString()}</p>}
-                  {paisInfo && <p className="meta">{paisInfo.name} · {paisInfo.capital || "—"}</p>}
+                  {sol?.sunrise && sol?.sunset && (
+                    <p className="meta">🌅 Amanecer {horaEnZona(sol.sunrise, clima?.timezone)} · Atardecer {horaEnZona(sol.sunset, clima?.timezone)} (hora local)</p>
+                  )}
+                  {paisInfo && <p className="meta">🌐 {paisInfo.name} · Capital: {paisInfo.capital || "—"}</p>}
                   {festivos.slice(0, 4).map((h) => <span className="fact" key={h.date}>{h.date} · {h.name}</span>)}
                 </div>
 
@@ -621,6 +817,7 @@ export default function TourApp() {
                 <BotonAccion
                   variante="red"
                   className="btn-inmersivo"
+                  ref={arBotonAbrir}
                   estado={camara.estado}
                   mensaje={camara.mensaje}
                   mensajeVisible
@@ -634,8 +831,9 @@ export default function TourApp() {
 
             {tab === "instalar" && (
               <section className="install">
-                <h2>Descargar</h2>
-                <p>{instalada ? "Ya está instalada." : "Instálala en el teléfono, tablet o computadora."}</p>
+                <span className="eyebrow">Tu guía, siempre a mano</span>
+                <h2>Un pasaporte de bolsillo</h2>
+                <p>{instalada ? "Ya está instalada y lista para acompañarte." : "Instálala en el teléfono, tablet o computadora y vuelve a tus historias cuando quieras."}</p>
                 {!instalada && (
                   <BotonAccion
                     variante="gold"
@@ -648,7 +846,8 @@ export default function TourApp() {
                     {instalarEvt ? "Instalar ahora" : "Ver cómo instalar"}
                   </BotonAccion>
                 )}
-                {qr && <img className="qr" src={qr} alt="Código QR de instalación" />}
+                {qr && <img className="qr" src={qr} alt="Código QR de instalación" loading="lazy" referrerPolicy="no-referrer" />}
+                {qr && <p className="qr-nota">El código solo contiene la dirección de esta guía.</p>}
                 <Colapsable titulo="Instrucciones paso a paso" className="pasos">
                   <ol className="steps">
                     <li>iPhone: Safari → Compartir → Añadir a pantalla de inicio.</li>
@@ -661,7 +860,12 @@ export default function TourApp() {
             {tab === "privacidad" && <PoliticaPrivacidad />}
           </TransicionPanel>
         </div>
-      </div>
+      </main>
+
+      <footer className="app-inner app-footer">
+        <span>Hecha para caminar más despacio <span aria-hidden="true">✦</span></span>
+        <a href="/privacidad">Privacidad y datos</a>
+      </footer>
 
       <Pestanas
         opciones={TABS}
@@ -674,26 +878,31 @@ export default function TourApp() {
 
       <RegionAnuncio mensaje={anuncio} />
 
-      {arOn && (
-        <div className="ar" role="dialog" aria-modal="true" aria-label={`Modo inmersivo de ${actual.nombre}`}>
-          <video ref={videoRef} playsInline muted autoPlay />
-          <div className="ar-ui">
-            <div>
-              <span className="pill">Modo inmersivo</span>
-              <h2>{actual.nombre}</h2>
-              {msgCamara && <p>{msgCamara}</p>}
-            </div>
-            <div className="audio-actions">
-              <BotonAccion variante="gold" confirmar={false} onClick={() => toggleAudio()}>
-                {hablando ? "Silenciar" : "Narrar"}
-              </BotonAccion>
-              <BotonAccion variante="ghost" onClick={cerrarAR} ref={arBotonCerrar}>
-                Cerrar
-              </BotonAccion>
-            </div>
+      <div
+        className="ar"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ar-titulo"
+        hidden={!arOn}
+        aria-hidden={!arOn || undefined}
+        inert={!arOn}
+      >
+        <video ref={videoRef} playsInline muted autoPlay aria-hidden="true" tabIndex={-1} />
+        <div className="ar-ui">
+          <div>
+            <span className="pill">Modo inmersivo</span>
+            <h2 id="ar-titulo">{actual.nombre}</h2>
+          </div>
+          <div className="audio-actions">
+            <BotonAccion variante="gold" confirmar={false} onClick={() => toggleAudio()}>
+              {hablando ? "Silenciar" : "Narrar"}
+            </BotonAccion>
+            <BotonAccion variante="ghost" onClick={cerrarAR} ref={arBotonCerrar}>
+              Cerrar
+            </BotonAccion>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

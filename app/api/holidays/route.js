@@ -1,19 +1,33 @@
-import { isoDePais } from "../../../data/indexes.js";
-import { fetchPublic, jsonErr, jsonOk } from "../../../lib/http.js";
+import { isoDePais, PAIS_ISO } from "../../../data/indexes.js";
+import { fetchPublic, jsonErr, jsonOk, readCountryCode } from "../../../lib/http.js";
+
+const CODIGOS_PAIS = new Set(Object.values(PAIS_ISO));
 
 export async function GET(request) {
-  const pais = request.nextUrl.searchParams.get("pais");
-  const code = isoDePais(pais || "") || request.nextUrl.searchParams.get("code");
-  const year = request.nextUrl.searchParams.get("year") || String(new Date().getFullYear());
-  if (!code) return jsonErr("País no soportado");
+  const params = request.nextUrl.searchParams;
+  const pais = params.get("pais")?.trim() || "";
+  const code = readCountryCode(params, pais, isoDePais);
+  const rawYear = params.get("year") || String(new Date().getFullYear());
+  const year = Number(rawYear);
+  const currentYear = new Date().getFullYear();
+
+  if (!code || !CODIGOS_PAIS.has(code)) return jsonErr("País no soportado");
+  if (!/^\d{4}$/.test(rawYear) || !Number.isInteger(year) || year < 1900 || year > currentYear + 1) {
+    return jsonErr("Año inválido");
+  }
+
   try {
-    const url = `https://date.nager.at/api/v3/PublicHolidays/${encodeURIComponent(year)}/${encodeURIComponent(code)}`;
+    const url = `https://date.nager.at/api/v3/PublicHolidays/${year}/${code}`;
     const rows = await fetchPublic(url, { revalidate: 86400 });
-    const next = (Array.isArray(rows) ? rows : [])
-      .filter((h) => h?.date && h?.localName)
+    const holidays = (Array.isArray(rows) ? rows : [])
+      .filter((holiday) => holiday?.date && holiday?.localName)
       .slice(0, 8)
-      .map((h) => ({ date: h.date, name: h.localName, global: !!h.global }));
-    return jsonOk({ holidays: next }, 86400);
+      .map((holiday) => ({
+        date: holiday.date,
+        name: String(holiday.localName).slice(0, 160),
+        global: !!holiday.global,
+      }));
+    return jsonOk({ holidays }, 86400);
   } catch {
     return jsonErr("No disponible", 503);
   }

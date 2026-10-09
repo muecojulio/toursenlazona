@@ -8,14 +8,14 @@ export const TABS = [
 ];
 
 export const FILTROS = [
-  { id: "todos", label: "Todos" },
-  { id: "Japón", label: "Japón" },
-  { id: "Kioto", label: "Kioto" },
-  { id: "Tokio", label: "Tokio" },
-  { id: "Osaka", label: "Osaka" },
-  { id: "Kawaguchiko", label: "Kawaguchiko" },
-  { id: "Narita", label: "Narita" },
-  { id: "Mundo", label: "Mundo" },
+  { id: "todos", label: "Todos", icon: "🌎" },
+  { id: "Japón", label: "Japón", icon: "🇯🇵" },
+  { id: "Kioto", label: "Kioto", icon: "⛩️" },
+  { id: "Tokio", label: "Tokio", icon: "🏙️" },
+  { id: "Osaka", label: "Osaka", icon: "🏯" },
+  { id: "Kawaguchiko", label: "Kawaguchiko", icon: "🗻" },
+  { id: "Narita", label: "Narita", icon: "🍵" },
+  { id: "Mundo", label: "Mundo", icon: "🧭" },
 ];
 
 export const TONOS = [
@@ -43,7 +43,8 @@ export function coincideFiltro(sitio, filtro) {
   if (filtro === "todos") return true;
   if (filtro === "Japón") return sitio.region === "Japón";
   if (filtro === "Mundo") return sitio.region === "Mundo";
-  return `${sitio.ciudad} ${sitio.nombre}`.toLowerCase().includes(filtro.toLowerCase());
+  const comparar = (texto) => String(texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return comparar(`${sitio.ciudad} ${sitio.nombre}`).includes(comparar(filtro));
 }
 
 export function centroMapa(filtro) {

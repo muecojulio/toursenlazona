@@ -1,13 +1,13 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Tours de Historia",
-  description: "Guías inmersivas de sitios históricos del mundo y de todo Japón.",
+  title: "Tours de Historia — Pasaporte a otra época",
+  description: "Explora 76 lugares históricos con mapas, narración y rutas de viaje inmersivas.",
   applicationName: "Tours de Historia",
   appleWebApp: {
     capable: true,
     title: "Tours de Historia",
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
   },
   icons: {
     icon: [
@@ -21,7 +21,7 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#1a1410",
+  themeColor: "#ef7158",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -30,14 +30,6 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
-      <head>
-        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-      </head>
       <body>{children}</body>
     </html>
   );
