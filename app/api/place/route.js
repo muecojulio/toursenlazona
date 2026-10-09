@@ -1,19 +1,51 @@
-import { NextResponse } from "next/server";
+import { sitios } from "../../../data/sitios.js";
+import { jsonErr, jsonOk } from "../../../lib/http.js";
+
+const TITULOS_PERMITIDOS = new Set(sitios.map((sitio) => sitio.nombre));
+const CACHE_SECONDS = 86_400;
+const TIMEOUT_MS = 8_000;
+const HEADERS = {
+  Accept: "application/json",
+  "User-Agent": "toursenlazona/1.1 (public tour app)",
+};
+
+function safeWikimediaUrl(value, hosts) {
+  if (!value) return "";
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !hosts.includes(url.hostname)) return "";
+    return url.href;
+  } catch {
+    return "";
+  }
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    headers: HEADERS,
+    next: { revalidate: CACHE_SECONDS },
+    redirect: "error",
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  return response.ok ? response.json() : null;
+}
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const title = searchParams.get("title");
-  if (!title) return NextResponse.json({ error: "Falta title" }, { status: 400 });
+  const title = new URL(request.url).searchParams.get("title")?.trim() || "";
+  if (
+    !title ||
+    title.length > 180 ||
+    /[\u0000-\u001f\u007f]/.test(title) ||
+    !TITULOS_PERMITIDOS.has(title)
+  ) {
+    return jsonErr("Título inválido");
+  }
 
-  const headers = { "User-Agent": "toursenlazona/1.0 (tour app; contact via project owner)" };
   try {
     const wikiUrl = `https://es.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-    const wikiRes = await fetch(wikiUrl, { headers, next: { revalidate: 86400 } });
-    const wiki = wikiRes.ok ? await wikiRes.json() : null;
+    const wiki = await fetchJson(wikiUrl);
 
     let imagenCommons = null;
-    // La imagen del artículo es la alternativa más fiel al sitio; Commons solo
-    // se consulta cuando Wikipedia no ofrece miniatura.
     if (!wiki?.thumbnail?.source && !wiki?.originalimage?.source) {
       const commonsUrl = new URL("https://commons.wikimedia.org/w/api.php");
       commonsUrl.searchParams.set("action", "query");
@@ -25,26 +57,30 @@ export async function GET(request) {
       commonsUrl.searchParams.set("iiprop", "url");
       commonsUrl.searchParams.set("iiurlwidth", "900");
       commonsUrl.searchParams.set("format", "json");
-
-      const commonsRes = await fetch(commonsUrl, { headers, next: { revalidate: 86400 } });
-      const commons = commonsRes.ok ? await commonsRes.json() : null;
+      const commons = await fetchJson(commonsUrl);
       const page = commons?.query?.pages ? Object.values(commons.query.pages)[0] : null;
       imagenCommons = page?.imageinfo?.[0] || null;
     }
 
-    const thumbnail = wiki?.thumbnail?.source || wiki?.originalimage?.source || imagenCommons?.thumburl || imagenCommons?.url || "";
-    const original = wiki?.originalimage?.source || imagenCommons?.url || thumbnail;
+    const original =
+      safeWikimediaUrl(wiki?.originalimage?.source, ["upload.wikimedia.org"]) ||
+      safeWikimediaUrl(imagenCommons?.url, ["upload.wikimedia.org"]);
+    const thumbnail =
+      safeWikimediaUrl(wiki?.thumbnail?.source, ["upload.wikimedia.org"]) ||
+      safeWikimediaUrl(imagenCommons?.thumburl, ["upload.wikimedia.org"]) ||
+      original;
+    const source = safeWikimediaUrl(wiki?.content_urls?.desktop?.page, ["es.wikipedia.org"]);
 
-    return NextResponse.json({
-      title: wiki?.title || title,
-      extract: wiki?.extract || "",
-      source: wiki?.content_urls?.desktop?.page || "",
-      image: {
-        original,
-        thumbnail,
+    return jsonOk(
+      {
+        title: String(wiki?.title || title).slice(0, 180),
+        extract: String(wiki?.extract || "").slice(0, 4_000),
+        source,
+        image: { original: original || thumbnail, thumbnail },
       },
-    }, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=172800" } });
+      CACHE_SECONDS
+    );
   } catch {
-    return NextResponse.json({ title, extract: "", image: { original: "", thumbnail: "" } });
+    return jsonErr("No disponible", 503);
   }
 }

@@ -1,12 +1,12 @@
 {
-  "name": "Tours de Historia",
+  "name": "Tours de Historia — Pasaporte a otra época",
   "short_name": "Tours Historia",
-  "description": "Guías inmersivas de sitios históricos.",
+  "description": "Explora lugares históricos con mapas, narración y rutas de viaje.",
   "start_url": "/?fuente=app",
   "scope": "/",
-  "display": "fullscreen",
-  "background_color": "#1a1410",
-  "theme_color": "#1a1410",
+  "display": "standalone",
+  "background_color": "#fbf4e5",
+  "theme_color": "#ef7158",
   "lang": "es",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
